@@ -1,7 +1,10 @@
-﻿using MechanicShop.Application.Features.Identity.Dtos;
+﻿using MechanicShop.Application.Features.Identity;
+using MechanicShop.Application.Features.Identity.Dtos;
 using MechanicShop.Application.Features.Identity.Queries;
+using MechanicShop.Domain.Common.Results;
 using System;
 using System.Collections.Generic;
+using System.Security.Claims;
 using System.Text;
 
 namespace MechanicShop.Application.Common.Interfaces;
