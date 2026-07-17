@@ -4,7 +4,8 @@ using Microsoft.Extensions.Logging;
 
 namespace MechanicShop.Application.Common.Behaviors;
 
-public class LoggingBehavior<TRequest>(ILogger<TRequest> logger, IUser user, IIdentityService identityService) : IRequestPreProcessor<TRequest>
+public class LoggingBehavior<TRequest>(ILogger<TRequest> logger, IUser user, IIdentityService identityService) 
+: IRequestPreProcessor<TRequest> where TRequest:notnull
 {
     public async Task Process(TRequest request, CancellationToken cancellationToken)
     {
