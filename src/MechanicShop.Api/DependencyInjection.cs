@@ -1,6 +1,3 @@
-using Serilog;
-using System.Text.Json.Serialization;
-using System.Threading.RateLimiting;
 using Asp.Versioning;
 using MechanicShop.Api.Infrastructure;
 using MechanicShop.Api.OpenApi.Transformers;
@@ -8,18 +5,21 @@ using MechanicShop.Api.Services;
 using MechanicShop.Application.Common.Interfaces;
 using MechanicShop.Infrastructure.Settings;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
+using Serilog;
+using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
 public static class DependencyInjection
 {
 
-   public static IServiceCollection AddPresentation(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddPresentation(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<AppSettings>(configuration.GetSection(AppSettings.SectionName));
-
 
         services.AddCustomProblemDetails()
+                .AddValidatedOptions()
                 .AddCustomApiVersioning()
                 .AddApiDocumentation()
                 .AddExceptionHandling()
@@ -33,6 +33,14 @@ public static class DependencyInjection
 
         return services;
     }
+
+    public static IServiceCollection AddValidatedOptions(this IServiceCollection services)
+    {
+        services.AddOptionsWithValidateOnStart<AppSettings>(AppSettings.SectionName);
+        services.AddOptionsWithValidateOnStart<JwtSettings>(JwtSettings.SectionName);
+        return services;
+    }
+
 
     public static IServiceCollection AddAppOutputCaching(this IServiceCollection services)
     {
@@ -142,7 +150,9 @@ public static class DependencyInjection
 
     public static IServiceCollection AddConfiguredCors(this IServiceCollection services, IConfiguration configuration)
     {
-        var appSettings = configuration.GetSection(AppSettings.SectionName).Get<AppSettings>()!;
+
+        var appSettings = configuration.GetSection(AppSettings.SectionName).Get<AppSettings>()
+              ?? throw new InvalidOperationException($"Missing configuration section '{AppSettings.SectionName}'.");
 
         services.AddCors(options => options.AddPolicy(
             appSettings.CorsPolicyName,
@@ -154,8 +164,8 @@ public static class DependencyInjection
 
         return services;
     }
-   
-       public static IApplicationBuilder UseCoreMiddlewares(this IApplicationBuilder app, IConfiguration configuration)
+
+    public static IApplicationBuilder UseCoreMiddlewares(this IApplicationBuilder app, IConfiguration configuration)
     {
         // 1. Exception handling should be FIRST to catch all errors
         app.UseExceptionHandler();
@@ -170,7 +180,8 @@ public static class DependencyInjection
         app.UseSerilogRequestLogging();
 
         // 5. CORS (before authentication/authorization)
-        app.UseCors(configuration["AppSettings:CorsPolicyName"]!);
+        var appSettings = app.ApplicationServices.GetRequiredService<IOptions<AppSettings>>().Value;
+        app.UseCors(appSettings.CorsPolicyName);
 
         // 6. Rate limiting (before authentication to protect auth endpoints)
         app.UseRateLimiter();
