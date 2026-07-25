@@ -36,8 +36,14 @@ public static class DependencyInjection
 
     public static IServiceCollection AddValidatedOptions(this IServiceCollection services)
     {
-        services.AddOptionsWithValidateOnStart<AppSettings>(AppSettings.SectionName);
-        services.AddOptionsWithValidateOnStart<JwtSettings>(JwtSettings.SectionName);
+        services.AddOptions<AppSettings>()
+                .BindConfiguration(AppSettings.SectionName)
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
+        services.AddOptions<JwtSettings>()
+                .BindConfiguration(JwtSettings.SectionName)
+                .ValidateDataAnnotations()
+                .ValidateOnStart();
         return services;
     }
 
