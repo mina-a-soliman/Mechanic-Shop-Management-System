@@ -8,9 +8,10 @@ public sealed class GenerateTokenQueryValidator : AbstractValidator<GenerateToke
     public GenerateTokenQueryValidator()
     {
         RuleFor(request => request.Email)
-              .Null().NotEmpty()
+              .NotNull().NotEmpty()
               .WithErrorCode("Email_Null_Or_Empty")
-              .WithMessage("Email cannot be null or empty");
+              .WithMessage("Email cannot be null or empty")
+              .EmailAddress().WithErrorCode("Email_Invalid_Format");
 
         RuleFor(request => request.Password)
              .NotNull().NotEmpty()

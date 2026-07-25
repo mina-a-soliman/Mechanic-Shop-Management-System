@@ -1,25 +1,27 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using MechanicShop.Application.Common.Interfaces;
 using MechanicShop.Application.Features.Identity;
 using MechanicShop.Application.Features.Identity.Dtos;
 using MechanicShop.Domain.Common.Results;
 using MechanicShop.Domain.Identity;
+using MechanicShop.Infrastructure.Settings;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace MechanicShop.Infrastructure.Identity;
 
-public class TokenProvider(
-IConfiguration configuration, IAppDbContext context
-) : ITokenProvider
+public class TokenProvider(IOptionsSnapshot<JwtSettings> jwtOptions, IAppDbContext context) 
+             : ITokenProvider
 {
+    private readonly JwtSettings _jwt = jwtOptions.Value;
     public async Task<Result<TokenResponse>> GenerateJwtTokenAsync(AppUserDto user, CancellationToken ct = default)
     {
-         var tokenResult = await CreateAsync(user, ct);
+        var tokenResult = await CreateAsync(user, ct);
 
         if (tokenResult.IsError)
         {
@@ -31,14 +33,14 @@ IConfiguration configuration, IAppDbContext context
 
     public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
     {
-         var tokenValidationParameters = new TokenValidationParameters
+        var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(configuration["JwtSettings:Secret"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Secret)),
             ValidateIssuer = true,
-            ValidIssuer = configuration["JwtSettings:Issuer"],
+            ValidIssuer = _jwt.Issuer,
             ValidateAudience = true,
-            ValidAudience = configuration["JwtSettings:Audience"],
+            ValidAudience = _jwt.Audience,
             ValidateLifetime = false, // Ignore token expiration
             ClockSkew = TimeSpan.Zero
         };
@@ -57,17 +59,14 @@ IConfiguration configuration, IAppDbContext context
 
     private async Task<Result<TokenResponse>> CreateAsync(AppUserDto user, CancellationToken ct = default)
     {
-        var jwtSettings = configuration.GetSection("JwtSettings");
-        var issuer = jwtSettings["Issuer"]!;
-        var audience = jwtSettings["Audience"]!;
-        var key = jwtSettings["Secret"]!;
+   
 
-        var expires = DateTime.UtcNow.AddMinutes(int.Parse(jwtSettings["TokenExpirationInMinutes"]!));
+        var expires = DateTime.UtcNow.AddMinutes(_jwt.TokenExpirationInMinutes);
 
         var claims = new List<Claim>
         {
-            new (JwtRegisteredClaimNames.Sub, user.UserId!),
-            new (JwtRegisteredClaimNames.Email, user.Email!),
+            new (JwtRegisteredClaimNames.Sub, user.UserId),
+            new (JwtRegisteredClaimNames.Email, user.Email),
         };
 
         foreach (var role in user.Roles)
@@ -79,10 +78,10 @@ IConfiguration configuration, IAppDbContext context
         {
             Subject = new ClaimsIdentity(claims),
             Expires = expires,
-            Issuer = issuer,
-            Audience = audience,
+            Issuer = _jwt.Issuer,
+            Audience = _jwt.Audience,
             SigningCredentials = new SigningCredentials(
-        new SymmetricSecurityKey(Encoding.UTF8.GetBytes(key)),
+        new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwt.Secret)),
         SecurityAlgorithms.HmacSha256Signature),
         };
 
@@ -90,15 +89,15 @@ IConfiguration configuration, IAppDbContext context
 
         var securityToken = tokenHandler.CreateToken(descriptor);
 
-        var oldRefreshTokens = await context.RefreshTokens
-        .Where(rt => rt.UserId == user.UserId)
-        .ExecuteDeleteAsync(ct);
+        await context.RefreshTokens
+                     .Where(rt => rt.UserId == user.UserId)
+                     .ExecuteDeleteAsync(ct);
 
         var refreshTokenResult = RefreshToken.Create(
            Guid.NewGuid(),
            GenerateRefreshToken(),
            user.UserId,
-           DateTime.UtcNow.AddDays(7));
+           DateTime.UtcNow.AddDays(_jwt.RefreshTokenExpirationInDays));
 
         if (refreshTokenResult.IsError)
         {
